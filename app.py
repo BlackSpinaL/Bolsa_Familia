@@ -4,16 +4,21 @@ Calculadora de Frequência Escolar - Bolsa Família
 Replica e automatiza a lógica da planilha "Bolsa_Família_2026.xlsx".
 
 Novidades desta versão:
+- Normalização de nomes de turma: aceita variações (hífen, dois-pontos,
+  "ano"/"anos", maiúsculas, acentos) ao importar planilhas.
+- Aviso claro quando uma turma não é reconhecida (evita % de frequência
+  aparecer como None silenciosamente).
 - Uploader de JSON para restaurar o calendário sem mexer no GitHub.
 - Edição do NOME das turmas (regulares e de contraturno) direto na tela.
-- Botão para apagar linha selecionada na tabela de lote.
-- Compatível com Streamlit >= 1.40 (ícone de lixeira no data_editor).
+- Botão para apagar linha na tabela de lote.
+- Compatível com Streamlit >= 1.40.
 
 Autor: gerado com apoio do Claude (Anthropic) a partir da planilha original do usuário.
 """
 
 import json
 import io
+import unicodedata
 from pathlib import Path
 
 import pandas as pd
@@ -72,6 +77,46 @@ def lista_turmas(calendario: dict):
         turmas.append(disp)
         mapa[disp] = ("contraturno", nome)
     return turmas, mapa
+
+
+# ----------------------------------------------------------------------------
+# Normalização de nomes de turma (para importação tolerante)
+# ----------------------------------------------------------------------------
+def normalizar_nome(s) -> str:
+    """Remove acentos, pontuação, espaços extras e deixa minúsculo —
+    para comparar nomes de turma de forma tolerante."""
+    if s is None:
+        return ""
+    s = str(s)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.lower()
+    for ch in [":", "-", "_", ".", ",", ";", "/", "\\", "(", ")", "[", "]"]:
+        s = s.replace(ch, " ")
+    # normaliza singular/plural simples
+    s = s.replace(" anos", " ano")
+    s = " ".join(s.split())
+    return s
+
+
+def encontrar_turma_correspondente(valor, turmas_validas):
+    """Tenta achar a turma válida que mais se parece com o valor digitado.
+    Retorna o nome canônico ou None se não achar."""
+    if valor is None:
+        return None
+    alvo = normalizar_nome(valor)
+    if not alvo:
+        return None
+    # 1ª tentativa: match exato após normalização
+    for t in turmas_validas:
+        if normalizar_nome(t) == alvo:
+            return t
+    # 2ª tentativa: match parcial (um contém o outro)
+    for t in turmas_validas:
+        nt = normalizar_nome(t)
+        if alvo in nt or nt in alvo:
+            return t
+    return None
 
 
 # ----------------------------------------------------------------------------
@@ -269,8 +314,29 @@ with aba_lote:
             if not colunas_esperadas.issubset(set(df_importado.columns)):
                 st.error(f"O arquivo precisa conter as colunas: {', '.join(colunas_esperadas)}")
             else:
-                st.session_state["tabela_lote"] = df_importado[["Aluno", "Turma", "Mês", "Faltas"]]
-                st.success("Arquivo importado com sucesso!")
+                df_importado = df_importado[["Aluno", "Turma", "Mês", "Faltas"]].copy()
+
+                # Tenta corrigir automaticamente os nomes de turma
+                nao_reconhecidas = []
+                turmas_corrigidas = []
+                for valor in df_importado["Turma"]:
+                    corr = encontrar_turma_correspondente(valor, turmas)
+                    turmas_corrigidas.append(corr if corr is not None else valor)
+                    if corr is None and not pd.isna(valor):
+                        nao_reconhecidas.append(str(valor))
+                df_importado["Turma"] = turmas_corrigidas
+
+                st.session_state["tabela_lote"] = df_importado
+
+                if nao_reconhecidas:
+                    st.warning(
+                        "⚠️ Algumas turmas da planilha não foram reconhecidas automaticamente. "
+                        "Corrija na tabela antes de calcular:\n\n"
+                        + "\n".join(f"- `{v}`" for v in sorted(set(nao_reconhecidas)))
+                        + "\n\n**Turmas válidas:** " + ", ".join(f"`{t}`" for t in turmas)
+                    )
+                else:
+                    st.success("Arquivo importado com sucesso!")
         except Exception as e:
             st.error(f"Erro ao ler o arquivo: {e}")
 
@@ -301,12 +367,19 @@ with aba_lote:
 
     if st.button("Calcular frequência de todos os alunos", type="primary"):
         linhas = []
+        problemas = []
         for _, row in tabela_editada.iterrows():
             if pd.isna(row.get("Turma")) or pd.isna(row.get("Mês")):
                 continue
             res = calcular_total_aulas(calendario, row["Turma"], row["Mês"], mapa_turmas)
             faltas = int(row["Faltas"]) if not pd.isna(row["Faltas"]) else 0
-            freq = calcular_frequencia(res["total_aulas"], faltas)
+
+            if res["total_aulas"] == 0:
+                problemas.append(f"{row['Aluno']} — turma `{row['Turma']}` não reconhecida")
+                freq = None
+            else:
+                freq = calcular_frequencia(res["total_aulas"], faltas)
+
             linhas.append(
                 {
                     "Aluno": row["Aluno"],
@@ -315,8 +388,18 @@ with aba_lote:
                     "Total de aulas no mês": res["total_aulas"],
                     "Faltas": faltas,
                     "% Frequência": round(freq * 100, 2) if freq is not None else None,
-                    "Abaixo de 75%": "⚠️ Sim" if (freq is not None and freq < LIMITE_FREQUENCIA) else "Não",
+                    "Abaixo de 75%": (
+                        "⚠️ Sim" if (freq is not None and freq < LIMITE_FREQUENCIA)
+                        else ("❓ Verificar turma" if freq is None else "Não")
+                    ),
                 }
+            )
+
+        if problemas:
+            st.error(
+                "❌ Algumas linhas não puderam ser calculadas porque a turma não foi reconhecida:\n\n"
+                + "\n".join(f"- {p}" for p in problemas)
+                + "\n\n**Turmas válidas:** " + ", ".join(f"`{t}`" for t in turmas)
             )
 
         if linhas:
@@ -328,8 +411,11 @@ with aba_lote:
         st.subheader("Resultado")
 
         def destacar_abaixo(row):
-            cor = "background-color: #ffe0e0" if row["Abaixo de 75%"] == "⚠️ Sim" else ""
-            return [cor] * len(row)
+            if row["Abaixo de 75%"] == "⚠️ Sim":
+                return ["background-color: #ffe0e0"] * len(row)
+            if row["Abaixo de 75%"] == "❓ Verificar turma":
+                return ["background-color: #fff4cc"] * len(row)
+            return [""] * len(row)
 
         st.dataframe(
             st.session_state["df_resultado"].style.apply(destacar_abaixo, axis=1),
