@@ -1,0 +1,68 @@
+{
+  "meses": ["Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"],
+
+  "dias_letivos_por_mes": {
+    "Fevereiro": 15,
+    "Março": 23,
+    "Abril": 18,
+    "Maio": 21,
+    "Junho": 19,
+    "Julho": 14,
+    "Agosto": 21,
+    "Setembro": 23,
+    "Outubro": 17,
+    "Novembro": 20,
+    "Dezembro": 9
+  },
+
+  "turmas_simples": {
+    "1º ao 5º ano - EFAI": {
+      "aulas_por_dia": 5
+    },
+    "6º ao 9º ano - EFAF": {
+      "aulas_por_dia": 6
+    },
+    "1º e 2º ano - Ensino Médio": {
+      "aulas_por_dia": 7
+    }
+  },
+
+  "turmas_3ano_em": {
+    "21301": {
+      "aulas_manha_por_dia": 7,
+      "aulas_terca_tarde": 4,
+      "aulas_quinta_tarde": 3,
+      "calendario_contraturno": {
+        "Fevereiro": {"tercas": 2, "quintas": 4},
+        "Março":     {"tercas": 5, "quintas": 4},
+        "Abril":     {"tercas": 3, "quintas": 4},
+        "Maio":      {"tercas": 5, "quintas": 4},
+        "Junho":     {"tercas": 5, "quintas": 3},
+        "Julho":     {"tercas": 2, "quintas": 3},
+        "Agosto":    {"tercas": 4, "quintas": 4},
+        "Setembro":  {"tercas": 5, "quintas": 4},
+        "Outubro":   {"tercas": 3, "quintas": 4},
+        "Novembro":  {"tercas": 4, "quintas": 4},
+        "Dezembro":  {"tercas": 2, "quintas": 2}
+      }
+    },
+    "21302": {
+      "aulas_manha_por_dia": 7,
+      "aulas_terca_tarde": 3,
+      "aulas_quinta_tarde": 4,
+      "calendario_contraturno": {
+        "Fevereiro": {"tercas": 2, "quintas": 4},
+        "Março":     {"tercas": 5, "quintas": 4},
+        "Abril":     {"tercas": 3, "quintas": 4},
+        "Maio":      {"tercas": 5, "quintas": 4},
+        "Junho":     {"tercas": 5, "quintas": 3},
+        "Julho":     {"tercas": 2, "quintas": 3},
+        "Agosto":    {"tercas": 4, "quintas": 4},
+        "Setembro":  {"tercas": 5, "quintas": 4},
+        "Outubro":   {"tercas": 3, "quintas": 4},
+        "Novembro":  {"tercas": 4, "quintas": 4},
+        "Dezembro":  {"tercas": 2, "quintas": 2}
+      }
+    }
+  }
+}
