@@ -120,7 +120,7 @@ calendario = carregar_calendario(CONFIG_PATH)
 turmas = lista_turmas(calendario)
 meses = calendario["meses"]
 
-st.title("📋 Calculadora de Frequência Escolar — Bolsa Família")
+st.title("📋 Calculadora de Frequência Escolar — Bolsa Família 2026")
 st.caption(
     "Calcula o percentual de frequência de cada aluno considerando as regras "
     "de nº de aulas por ano/turma, incluindo o contraturno do 3º ano do "
