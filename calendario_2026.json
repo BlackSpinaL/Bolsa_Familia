@@ -27,41 +27,53 @@
     }
   },
 
-  "turmas_3ano_em": {
+  "_comentario_turmas_contraturno": "Turmas que têm aula pela manhã + contraturno em dias específicos da semana (ex.: 3º ano do EM). 'aulas_por_dia_semana' define quantas aulas há em cada dia da semana quando ele é letivo para o contraturno; 'dias_letivos_por_dia_semana_por_mes' diz quantos desses dias (ex.: quantas terças) foram letivos em cada mês.",
+
+  "turmas_contraturno": {
     "21301": {
       "aulas_manha_por_dia": 7,
-      "aulas_terca_tarde": 4,
-      "aulas_quinta_tarde": 3,
-      "calendario_contraturno": {
-        "Fevereiro": {"tercas": 2, "quintas": 4},
-        "Março":     {"tercas": 5, "quintas": 4},
-        "Abril":     {"tercas": 3, "quintas": 4},
-        "Maio":      {"tercas": 5, "quintas": 4},
-        "Junho":     {"tercas": 5, "quintas": 3},
-        "Julho":     {"tercas": 2, "quintas": 3},
-        "Agosto":    {"tercas": 4, "quintas": 4},
-        "Setembro":  {"tercas": 5, "quintas": 4},
-        "Outubro":   {"tercas": 3, "quintas": 4},
-        "Novembro":  {"tercas": 4, "quintas": 4},
-        "Dezembro":  {"tercas": 2, "quintas": 2}
+      "aulas_por_dia_semana": {
+        "segunda": 0,
+        "terca": 4,
+        "quarta": 0,
+        "quinta": 3,
+        "sexta": 0
+      },
+      "dias_letivos_por_dia_semana_por_mes": {
+        "Fevereiro": {"segunda": 0, "terca": 2, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Março":     {"segunda": 0, "terca": 5, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Abril":     {"segunda": 0, "terca": 3, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Maio":      {"segunda": 0, "terca": 5, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Junho":     {"segunda": 0, "terca": 5, "quarta": 0, "quinta": 3, "sexta": 0},
+        "Julho":     {"segunda": 0, "terca": 2, "quarta": 0, "quinta": 3, "sexta": 0},
+        "Agosto":    {"segunda": 0, "terca": 4, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Setembro":  {"segunda": 0, "terca": 5, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Outubro":   {"segunda": 0, "terca": 3, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Novembro":  {"segunda": 0, "terca": 4, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Dezembro":  {"segunda": 0, "terca": 2, "quarta": 0, "quinta": 2, "sexta": 0}
       }
     },
     "21302": {
       "aulas_manha_por_dia": 7,
-      "aulas_terca_tarde": 3,
-      "aulas_quinta_tarde": 4,
-      "calendario_contraturno": {
-        "Fevereiro": {"tercas": 2, "quintas": 4},
-        "Março":     {"tercas": 5, "quintas": 4},
-        "Abril":     {"tercas": 3, "quintas": 4},
-        "Maio":      {"tercas": 5, "quintas": 4},
-        "Junho":     {"tercas": 5, "quintas": 3},
-        "Julho":     {"tercas": 2, "quintas": 3},
-        "Agosto":    {"tercas": 4, "quintas": 4},
-        "Setembro":  {"tercas": 5, "quintas": 4},
-        "Outubro":   {"tercas": 3, "quintas": 4},
-        "Novembro":  {"tercas": 4, "quintas": 4},
-        "Dezembro":  {"tercas": 2, "quintas": 2}
+      "aulas_por_dia_semana": {
+        "segunda": 0,
+        "terca": 3,
+        "quarta": 0,
+        "quinta": 4,
+        "sexta": 0
+      },
+      "dias_letivos_por_dia_semana_por_mes": {
+        "Fevereiro": {"segunda": 0, "terca": 2, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Março":     {"segunda": 0, "terca": 5, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Abril":     {"segunda": 0, "terca": 3, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Maio":      {"segunda": 0, "terca": 5, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Junho":     {"segunda": 0, "terca": 5, "quarta": 0, "quinta": 3, "sexta": 0},
+        "Julho":     {"segunda": 0, "terca": 2, "quarta": 0, "quinta": 3, "sexta": 0},
+        "Agosto":    {"segunda": 0, "terca": 4, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Setembro":  {"segunda": 0, "terca": 5, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Outubro":   {"segunda": 0, "terca": 3, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Novembro":  {"segunda": 0, "terca": 4, "quarta": 0, "quinta": 4, "sexta": 0},
+        "Dezembro":  {"segunda": 0, "terca": 2, "quarta": 0, "quinta": 2, "sexta": 0}
       }
     }
   }
