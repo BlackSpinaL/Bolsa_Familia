@@ -154,7 +154,7 @@ calendario = st.session_state["calendario"]
 turmas, mapa_turmas = lista_turmas(calendario)
 meses = calendario["meses"]
 
-st.title("📋 Calculadora de Frequência Escolar — Bolsa Família 2026")
+st.title("📋 Calculadora de Frequência Escolar — Bolsa Família")
 st.caption(
     "Calcula o percentual de frequência de cada aluno considerando as regras "
     "de nº de aulas por ano/turma, incluindo o contraturno das turmas que "
