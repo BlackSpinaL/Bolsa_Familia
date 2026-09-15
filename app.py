@@ -4,13 +4,13 @@ Calculadora de Frequência Escolar - Bolsa Família
 Replica e automatiza a lógica da planilha "Bolsa_Família_2026.xlsx".
 
 Novidades desta versão:
-- Normalização de nomes de turma: aceita variações (hífen, dois-pontos,
-  "ano"/"anos", maiúsculas, acentos) ao importar planilhas.
-- Aviso claro quando uma turma não é reconhecida (evita % de frequência
-  aparecer como None silenciosamente).
-- Uploader de JSON para restaurar o calendário sem mexer no GitHub.
-- Edição do NOME das turmas (regulares e de contraturno) direto na tela.
-- Botão para apagar linha na tabela de lote.
+- Nova aba "📄 Preencher Ofício (.docx)": depois de calcular as frequências
+  na aba de lote, você faz upload do ofício .docx recebido e o app preenche
+  automaticamente a coluna "Frequência" de cada aluno/mês.
+- Normalização de nomes de turma (importação tolerante).
+- Normalização de nomes de aluno (para casar com o ofício).
+- Uploader de JSON para restaurar o calendário.
+- Edição de turmas (regulares e com contraturno) direto na tela.
 - Compatível com Streamlit >= 1.40.
 
 Autor: gerado com apoio do Claude (Anthropic) a partir da planilha original do usuário.
@@ -18,6 +18,7 @@ Autor: gerado com apoio do Claude (Anthropic) a partir da planilha original do u
 
 import json
 import io
+import re
 import unicodedata
 from pathlib import Path
 
@@ -46,6 +47,12 @@ DIAS_SEMANA_LABEL = {
 }
 
 SUFIXO_CONTRATURNO = " (contraturno)"
+
+# Meses que podem aparecer no ofício (nome exatamente como no .docx)
+MESES_OFICIO = [
+    "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+]
 
 
 # ----------------------------------------------------------------------------
@@ -80,11 +87,10 @@ def lista_turmas(calendario: dict):
 
 
 # ----------------------------------------------------------------------------
-# Normalização de nomes de turma (para importação tolerante)
+# Normalização de nomes (turma e aluno)
 # ----------------------------------------------------------------------------
 def normalizar_nome(s) -> str:
-    """Remove acentos, pontuação, espaços extras e deixa minúsculo —
-    para comparar nomes de turma de forma tolerante."""
+    """Remove acentos, pontuação, espaços extras e deixa minúsculo."""
     if s is None:
         return ""
     s = str(s)
@@ -93,25 +99,33 @@ def normalizar_nome(s) -> str:
     s = s.lower()
     for ch in [":", "-", "_", ".", ",", ";", "/", "\\", "(", ")", "[", "]"]:
         s = s.replace(ch, " ")
-    # normaliza singular/plural simples
     s = s.replace(" anos", " ano")
     s = " ".join(s.split())
     return s
 
 
+def normalizar_nome_aluno(s) -> str:
+    """Versão para nome de aluno: tudo maiúsculo, sem pontuação."""
+    if s is None:
+        return ""
+    s = str(s)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.upper()
+    s = re.sub(r"[^A-Z ]", " ", s)
+    s = " ".join(s.split())
+    return s
+
+
 def encontrar_turma_correspondente(valor, turmas_validas):
-    """Tenta achar a turma válida que mais se parece com o valor digitado.
-    Retorna o nome canônico ou None se não achar."""
     if valor is None:
         return None
     alvo = normalizar_nome(valor)
     if not alvo:
         return None
-    # 1ª tentativa: match exato após normalização
     for t in turmas_validas:
         if normalizar_nome(t) == alvo:
             return t
-    # 2ª tentativa: match parcial (um contém o outro)
     for t in turmas_validas:
         nt = normalizar_nome(t)
         if alvo in nt or nt in alvo:
@@ -174,7 +188,6 @@ def calcular_total_aulas(calendario: dict, turma_disp: str, mes: str, mapa_turma
             )
 
     total_aulas = total_manha + total_contraturno
-
     return {
         "dias_letivos": dias_letivos,
         "aulas_por_dia": aulas_manha_dia,
@@ -192,6 +205,151 @@ def calcular_frequencia(total_aulas: int, faltas: int):
 
 
 # ----------------------------------------------------------------------------
+# Preenchimento do ofício .docx
+# ----------------------------------------------------------------------------
+def _iter_blocos_documento(doc):
+    """Itera parágrafos e tabelas na ordem em que aparecem."""
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+    body = doc.element.body
+    for child in body.iterchildren():
+        if child.tag.endswith("}p"):
+            yield {"tipo": "paragrafo", "conteudo": Paragraph(child, doc)}
+        elif child.tag.endswith("}tbl"):
+            yield {"tipo": "tabela", "conteudo": Table(child, doc)}
+
+
+def _extrair_nome_do_paragrafo(texto: str):
+    m = re.match(r"^\s*Nome\s*:\s*(.+?)\s*$", texto, flags=re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _formatar_percentual(valor: float) -> str:
+    """97.74 -> '97,74%'"""
+    return f"{valor:.2f}".replace(".", ",") + "%"
+
+
+def _preencher_tabela_aluno(tabela, valores_por_mes: dict, sobrescrever: bool = True):
+    """
+    Estrutura esperada (do ofício):
+      | Junho | Frequência | Motivo | ...
+      | Julho | Frequência | Motivo | ...
+
+    Ou seja: cada linha tem, na 1ª coluna, o nome do mês; na 2ª coluna,
+    a célula onde o valor entra.
+    Retorna lista de (mes, valor) efetivamente preenchidos.
+    """
+    preenchidos = []
+    for row in tabela.rows:
+        if len(row.cells) < 2:
+            continue
+        # Detecta se a 1ª célula (ou alguma célula da linha) é um nome de mês
+        mes_encontrado = None
+        idx_mes = None
+        for idx_cel, cell in enumerate(row.cells):
+            txt = cell.text.strip().lower()
+            for mes in valores_por_mes.keys():
+                if txt == mes.lower():
+                    mes_encontrado = mes
+                    idx_mes = idx_cel
+                    break
+            if mes_encontrado:
+                break
+
+        if mes_encontrado is None:
+            continue
+
+        # A célula-alvo é a próxima célula (coluna "Frequência")
+        # Se a estrutura tiver o mês na coluna 0 e a Frequência na coluna 1,
+        # idx_alvo = idx_mes + 1.
+        idx_alvo = idx_mes + 1
+        if idx_alvo >= len(row.cells):
+            continue
+
+        celula = row.cells[idx_alvo]
+        # Se já tem valor e não pode sobrescrever, pula
+        if celula.text.strip() and not sobrescrever:
+            continue
+
+        valor = valores_por_mes[mes_encontrado]
+        if valor is None:
+            continue
+
+        celula.text = _formatar_percentual(valor)
+        preenchidos.append((mes_encontrado, valor))
+
+    return preenchidos
+
+
+def preencher_oficio_docx(arquivo_docx, df_resultado: pd.DataFrame, sobrescrever: bool = True):
+    """
+    Recebe o arquivo .docx e o DataFrame com os cálculos.
+    Retorna (bytes_do_docx, relatorio).
+    """
+    from docx import Document
+
+    doc = Document(arquivo_docx)
+
+    # Mapa: nome_normalizado_do_aluno -> {mes: percentual}
+    mapa_alunos = {}
+    for _, row in df_resultado.iterrows():
+        nome_norm = normalizar_nome_aluno(row["Aluno"])
+        if not nome_norm:
+            continue
+        if row["% Frequência"] is None or pd.isna(row["% Frequência"]):
+            continue
+        mapa_alunos.setdefault(nome_norm, {})[row["Mês"]] = float(row["% Frequência"])
+
+    relatorio = {
+        "preenchidos": [],      # lista de (aluno, [(mes, valor), ...])
+        "nao_encontrados": [],  # nomes no ofício que não estão na planilha
+        "sem_valor": [],        # nomes achados mas sem % calculado
+    }
+
+    ultimo_nome = None
+    ultimo_nome_norm = None
+
+    for bloco in _iter_blocos_documento(doc):
+        if bloco["tipo"] == "paragrafo":
+            nome = _extrair_nome_do_paragrafo(bloco["conteudo"].text)
+            if nome:
+                ultimo_nome = nome
+                ultimo_nome_norm = normalizar_nome_aluno(nome)
+        elif bloco["tipo"] == "tabela":
+            if ultimo_nome_norm is None:
+                continue
+
+            valores_por_mes = mapa_alunos.get(ultimo_nome_norm)
+            if not valores_por_mes:
+                # Tenta match parcial
+                for chave, vals in mapa_alunos.items():
+                    if ultimo_nome_norm in chave or chave in ultimo_nome_norm:
+                        valores_por_mes = vals
+                        break
+
+            if not valores_por_mes:
+                if ultimo_nome not in relatorio["nao_encontrados"]:
+                    relatorio["nao_encontrados"].append(ultimo_nome)
+                continue
+
+            preenchidos = _preencher_tabela_aluno(
+                bloco["conteudo"], valores_por_mes, sobrescrever=sobrescrever
+            )
+            if preenchidos:
+                relatorio["preenchidos"].append((ultimo_nome, preenchidos))
+            else:
+                if ultimo_nome not in relatorio["sem_valor"]:
+                    relatorio["sem_valor"].append(ultimo_nome)
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue(), relatorio
+
+
+# ----------------------------------------------------------------------------
 # Interface
 # ----------------------------------------------------------------------------
 garantir_calendario_na_sessao()
@@ -206,8 +364,13 @@ st.caption(
     "têm aula em turno estendido."
 )
 
-aba_individual, aba_lote, aba_calendario = st.tabs(
-    ["👤 Cálculo individual", "👥 Cálculo em lote (vários alunos)", "🗓️ Calendário / Configurações"]
+aba_individual, aba_lote, aba_oficio, aba_calendario = st.tabs(
+    [
+        "👤 Cálculo individual",
+        "👥 Cálculo em lote (vários alunos)",
+        "📄 Preencher Ofício (.docx)",
+        "🗓️ Calendário / Configurações",
+    ]
 )
 
 # ----------------------------------------------------------------------------
@@ -316,7 +479,6 @@ with aba_lote:
             else:
                 df_importado = df_importado[["Aluno", "Turma", "Mês", "Faltas"]].copy()
 
-                # Tenta corrigir automaticamente os nomes de turma
                 nao_reconhecidas = []
                 turmas_corrigidas = []
                 for valor in df_importado["Turma"]:
@@ -433,7 +595,107 @@ with aba_lote:
         )
 
 # ----------------------------------------------------------------------------
-# Aba 3: calendário / configurações
+# Aba 3: preencher ofício .docx
+# ----------------------------------------------------------------------------
+with aba_oficio:
+    st.write(
+        "Faça upload do **ofício .docx** recebido (o mesmo modelo do Bolsa Família) "
+        "e o app preenche automaticamente as colunas **Frequência** de cada mês "
+        "com os percentuais calculados na aba **Cálculo em lote**."
+    )
+
+    if "df_resultado" not in st.session_state:
+        st.warning(
+            "⚠️ Primeiro vá na aba **👥 Cálculo em lote** e clique em "
+            "**\"Calcular frequência de todos os alunos\"**. "
+            "O preenchimento do ofício usa os resultados daquela aba."
+        )
+    else:
+        st.success(
+            f"✅ {len(st.session_state['df_resultado'])} registros de frequência "
+            "disponíveis para preencher o ofício."
+        )
+
+        arquivo_docx = st.file_uploader(
+            "Upload do ofício (.docx)", type=["docx"], key="upload_oficio"
+        )
+
+        sobrescrever = st.checkbox(
+            "Sobrescrever valores já existentes nas células",
+            value=False,
+            help="Se desmarcado, o app só preenche células vazias. "
+                 "Se marcado, substitui o que já estiver lá.",
+        )
+
+        if arquivo_docx is not None:
+            if st.button("🚀 Preencher ofício e gerar arquivo", type="primary"):
+                try:
+                    with st.spinner("Preenchendo o ofício..."):
+                        bytes_docx, relatorio = preencher_oficio_docx(
+                            arquivo_docx,
+                            st.session_state["df_resultado"],
+                            sobrescrever=sobrescrever,
+                        )
+                    st.session_state["docx_preenchido"] = bytes_docx
+
+                    st.success("Ofício processado!")
+
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Alunos preenchidos", len(relatorio["preenchidos"]))
+                    c2.metric("Não encontrados", len(relatorio["nao_encontrados"]))
+                    c3.metric("Sem valor calculado", len(relatorio["sem_valor"]))
+
+                    if relatorio["preenchidos"]:
+                        with st.expander(
+                            f"✅ {len(relatorio['preenchidos'])} aluno(s) preenchidos",
+                            expanded=False,
+                        ):
+                            for nome, itens in relatorio["preenchidos"]:
+                                detalhes = ", ".join(
+                                    f"{mes}={_formatar_percentual(val)}"
+                                    for mes, val in itens
+                                )
+                                st.write(f"- **{nome}** → {detalhes}")
+
+                    if relatorio["nao_encontrados"]:
+                        with st.expander(
+                            f"⚠️ {len(relatorio['nao_encontrados'])} aluno(s) do ofício NÃO encontrados na planilha",
+                            expanded=True,
+                        ):
+                            st.caption(
+                                "Esses nomes apareceram no .docx mas não têm cálculo na "
+                                "aba de lote. Confira se digitou o nome igual à planilha."
+                            )
+                            for n in relatorio["nao_encontrados"]:
+                                st.write(f"- {n}")
+
+                    if relatorio["sem_valor"]:
+                        with st.expander(
+                            f"⚠️ {len(relatorio['sem_valor'])} aluno(s) encontrados mas sem % calculado",
+                            expanded=True,
+                        ):
+                            st.caption(
+                                "O nome foi achado, mas não havia valor de frequência "
+                                "para os meses da tabela (ou a turma não foi reconhecida)."
+                            )
+                            for n in relatorio["sem_valor"]:
+                                st.write(f"- {n}")
+
+                except Exception as e:
+                    st.error(f"Erro ao processar o .docx: {e}")
+                    st.exception(e)
+
+        if "docx_preenchido" in st.session_state:
+            st.download_button(
+                "⬇️ Baixar ofício preenchido (.docx)",
+                data=st.session_state["docx_preenchido"],
+                file_name="oficio_preenchido.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+            )
+
+# ----------------------------------------------------------------------------
+# Aba 4: calendário / configurações
 # ----------------------------------------------------------------------------
 with aba_calendario:
     st.write(
